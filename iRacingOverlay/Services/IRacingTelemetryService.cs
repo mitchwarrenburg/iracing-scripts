@@ -161,8 +161,8 @@ public class IRacingTelemetryService
             {
                 if (currentLap > _lastLapCheck[carIdx])
                 {
-                    var lapTimeArray = data.Telemetry.CarIdxLastLapTime.GetValue();
-                    if (lapTimeArray is float[] lapTimes && carIdx < lapTimes.Length)
+                    var lapTimeValue = data.Telemetry["CarIdxLastLapTime"];
+                    if (lapTimeValue is float[] lapTimes && carIdx < lapTimes.Length)
                     {
                         var lapTime = lapTimes[carIdx];
                         if (lapTime > 0)
