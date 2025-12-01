@@ -130,7 +130,7 @@ public class IRacingTelemetryService
 
         foreach (var driver in driverInfo.CompetingDrivers)
         {
-            var carIdx = driver.CarIdx;
+            var carIdx = (int)driver.CarIdx;
 
             // Skip if not on track
             var position = (int)data.Telemetry.CarIdxPosition.GetValue(carIdx);
@@ -141,7 +141,7 @@ public class IRacingTelemetryService
             {
                 _drivers[carIdx] = new DriverData
                 {
-                    CarIdx = (int)carIdx,
+                    CarIdx = carIdx,
                     Name = driver.UserName ?? "Unknown",
                     CarClassId = (int)driver.CarClassID,
                     IsPlayer = carIdx == _playerCarIdx
@@ -151,29 +151,33 @@ public class IRacingTelemetryService
             var driverData = _drivers[carIdx];
 
             // Update position in class
-            driverData.PositionInClass = (int)data.Telemetry.CarIdxClassPosition.GetValue((int)carIdx);
+            driverData.PositionInClass = (int)data.Telemetry.CarIdxClassPosition.GetValue(carIdx);
 
             // Update current lap
-            var currentLap = (int)data.Telemetry.CarIdxLap.GetValue((int)carIdx);
+            var currentLap = (int)data.Telemetry.CarIdxLap.GetValue(carIdx);
 
             // Check for completed lap
-            if (_lastLapCheck.ContainsKey((int)carIdx))
+            if (_lastLapCheck.ContainsKey(carIdx))
             {
-                if (currentLap > _lastLapCheck[(int)carIdx])
+                if (currentLap > _lastLapCheck[carIdx])
                 {
-                    var lapTime = (double)data.Telemetry["CarIdxLastLapTime", (int)carIdx];
-                    if (lapTime > 0)
+                    var lapTimeArray = data.Telemetry.CarIdxLastLapTime.GetValue();
+                    if (lapTimeArray is float[] lapTimes && carIdx < lapTimes.Length)
                     {
-                        driverData.AddLap(currentLap - 1, lapTime, _sessionTime);
+                        var lapTime = lapTimes[carIdx];
+                        if (lapTime > 0)
+                        {
+                            driverData.AddLap(currentLap - 1, lapTime, _sessionTime);
+                        }
                     }
                 }
             }
 
-            _lastLapCheck[(int)carIdx] = currentLap;
+            _lastLapCheck[carIdx] = currentLap;
             driverData.CurrentLap = currentLap;
 
             // Update track position
-            driverData.CurrentDistance = (double)data.Telemetry.CarIdxLapDistPct.GetValue((int)carIdx);
+            driverData.CurrentDistance = (double)data.Telemetry.CarIdxLapDistPct.GetValue(carIdx);
         }
     }
 
