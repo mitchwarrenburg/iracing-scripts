@@ -1,0 +1,204 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - '*.sln'
+      - '*.csproj'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - '*.sln'
+      - '*.csproj'
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  PROJECT_PATH: 'src/iRacingOverlay/iRacingOverlay.csproj'
+  SOLUTION_PATH: 'iRacingOverlay.sln'
+
+jobs:
+  build:
+    name: Build Application
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Get version from csproj
+      id: version
+      shell: pwsh
+      run: |
+        [xml]$proj = Get-Content $env:PROJECT_PATH
+        $version = $proj.Project.PropertyGroup.Version
+        if ([string]::IsNullOrEmpty($version)) {
+          $version = "1.0.0"
+        }
+        $buildNumber = $env:GITHUB_RUN_NUMBER
+        $fullVersion = "$version.$buildNumber"
+        echo "version=$fullVersion" >> $env:GITHUB_OUTPUT
+        echo "short_version=$version" >> $env:GITHUB_OUTPUT
+
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.SOLUTION_PATH }}
+
+    - name: Build
+      run: dotnet build ${{ env.SOLUTION_PATH }} --configuration Release --no-restore /p:Version=${{ steps.version.outputs.version }}
+
+    - name: Publish
+      run: |
+        dotnet publish ${{ env.PROJECT_PATH }} `
+          --configuration Release `
+          --output ./publish `
+          --self-contained true `
+          --runtime win-x64 `
+          /p:PublishSingleFile=true `
+          /p:IncludeNativeLibrariesForSelfExtract=true `
+          /p:Version=${{ steps.version.outputs.version }}
+
+    - name: Install WiX Toolset
+      shell: pwsh
+      run: |
+        Invoke-WebRequest -Uri "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip" -OutFile "wix.zip"
+        Expand-Archive -Path "wix.zip" -DestinationPath ".\wix"
+        echo "$PWD\wix" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+    - name: Create Installer
+      shell: pwsh
+      run: |
+        $version = "${{ steps.version.outputs.version }}"
+        $publishDir = Resolve-Path ".\publish"
+        $installerDir = ".\installer"
+        New-Item -ItemType Directory -Force -Path $installerDir
+        
+        # Create WiX source file
+        @"
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+          <Product Id="*" 
+                   Name="iRacing Overlay" 
+                   Language="1033" 
+                   Version="$version" 
+                   Manufacturer="iRacing Community" 
+                   UpgradeCode="12345678-1234-1234-1234-123456789012">
+            
+            <Package InstallerVersion="200" 
+                     Compressed="yes" 
+                     InstallScope="perMachine" 
+                     Description="iRacing Position Overlay Installer" />
+
+            <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+            <MediaTemplate EmbedCab="yes" />
+
+            <Feature Id="ProductFeature" Title="iRacing Overlay" Level="1">
+              <ComponentGroupRef Id="ProductComponents" />
+            </Feature>
+
+            <Directory Id="TARGETDIR" Name="SourceDir">
+              <Directory Id="ProgramFilesFolder">
+                <Directory Id="INSTALLFOLDER" Name="iRacingOverlay" />
+              </Directory>
+              <Directory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsFolder" Name="iRacing Overlay"/>
+              </Directory>
+            </Directory>
+
+            <DirectoryRef Id="ApplicationProgramsFolder">
+              <Component Id="ApplicationShortcut" Guid="12345678-1234-1234-1234-123456789013">
+                <Shortcut Id="ApplicationStartMenuShortcut"
+                         Name="iRacing Overlay"
+                         Description="Race position overlay with predictions"
+                         Target="[INSTALLFOLDER]iRacingOverlay.exe"
+                         WorkingDirectory="INSTALLFOLDER"/>
+                <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
+                <RegistryValue Root="HKCU" 
+                              Key="Software\iRacingOverlay" 
+                              Name="installed" 
+                              Type="integer" 
+                              Value="1" 
+                              KeyPath="yes"/>
+              </Component>
+            </DirectoryRef>
+
+            <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+              <Component Id="MainExecutable" Guid="12345678-1234-1234-1234-123456789014">
+                <File Id="iRacingOverlayExe" 
+                      Source="$publishDir\iRacingOverlay.exe" 
+                      KeyPath="yes" />
+              </Component>
+              <Component Id="AppSettings" Guid="12345678-1234-1234-1234-123456789015">
+                <File Id="AppSettingsJson" 
+                      Source="$publishDir\appsettings.json" />
+              </Component>
+            </ComponentGroup>
+          </Product>
+        </Wix>
+        "@ | Out-File -FilePath "$installerDir\Product.wxs" -Encoding UTF8
+
+        # Compile and link
+        & wix\candle.exe -nologo "$installerDir\Product.wxs" -out "$installerDir\Product.wixobj"
+        & wix\light.exe -nologo "$installerDir\Product.wixobj" -out "$installerDir\iRacingOverlay-Setup.msi" -ext WixUIExtension -sval
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: iRacingOverlay-${{ steps.version.outputs.version }}
+        path: |
+          ./publish/**
+          ./installer/iRacingOverlay-Setup.msi
+
+    - name: Create Release
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ steps.version.outputs.version }}
+        release_name: Release v${{ steps.version.outputs.version }}
+        body: |
+          ## iRacing Overlay v${{ steps.version.outputs.version }}
+          
+          ### Installation
+          Download and run `iRacingOverlay-Setup.msi`
+          
+          ### Features
+          - Real-time race position overlay
+          - Intelligent catch time predictions
+          - Weighted lap time calculations
+          - System tray integration
+          - Auto-start with Windows (optional)
+          - Auto-show on race start
+          
+          ### Requirements
+          - Windows 10/11 (64-bit)
+          - .NET 8.0 Runtime (included in installer)
+          - iRacing installed
+          
+          ### Changes
+          See commit history for detailed changes.
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Asset
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./installer/iRacingOverlay-Setup.msi
+        asset_name: iRacingOverlay-Setup-v${{ steps.version.outputs.version }}.msi
+        asset_content_type: application/octet-stream
+

@@ -1,0 +1,162 @@
+<Window x:Class="iRacingOverlay.Views.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="iRacing Overlay"
+        Width="{Binding OverlaySettings.Width}"
+        Height="{Binding OverlaySettings.Height}"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="{Binding OverlaySettings.TopMost}"
+        ShowInTaskbar="False"
+        ResizeMode="CanResizeWithGrip">
+
+    <Border Background="{Binding BackgroundBrush}"
+            Opacity="{Binding OverlaySettings.Opacity}"
+            CornerRadius="8"
+            BorderBrush="#404040"
+            BorderThickness="1"
+            Padding="10">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <TextBlock Grid.Row="0"
+                       Text="Race Position Overlay"
+                       FontSize="{Binding OverlaySettings.FontSizeHeader}"
+                       FontWeight="Bold"
+                       Foreground="{Binding TextBrush}"
+                       HorizontalAlignment="Center"
+                       Margin="0,0,0,5"/>
+
+            <!-- Status -->
+            <TextBlock Grid.Row="1"
+                       Text="{Binding StatusText}"
+                       FontSize="{Binding OverlaySettings.FontSizeSmall}"
+                       Foreground="{Binding StatusBrush}"
+                       HorizontalAlignment="Center"
+                       Margin="0,0,0,10"/>
+
+            <!-- Opponents Ahead -->
+            <StackPanel Grid.Row="2" Margin="0,5,0,5">
+                <TextBlock Text="↑ AHEAD ↑"
+                           FontSize="{Binding OverlaySettings.FontSizeDriver}"
+                           Foreground="{Binding TextBrush}"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,5"/>
+
+                <ItemsControl ItemsSource="{Binding OpponentsAhead}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,2" Padding="5">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0"
+                                               Text="{Binding NameText}"
+                                               FontSize="{Binding FontSizeDriver}"
+                                               Foreground="{Binding ColorBrush}"
+                                               VerticalAlignment="Center"/>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="1"
+                                               Text="{Binding CatchText}"
+                                               FontSize="{Binding FontSizeSmall}"
+                                               Foreground="{Binding ColorBrush}"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="1"
+                                               Text="{Binding DetailsText}"
+                                               FontSize="{Binding FontSizeSmall}"
+                                               Foreground="{Binding ColorBrush}"
+                                               HorizontalAlignment="Right"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- Player -->
+            <Border Grid.Row="3"
+                    Background="#2a2a2a"
+                    BorderBrush="{Binding TextBrush}"
+                    BorderThickness="2"
+                    CornerRadius="4"
+                    Padding="8"
+                    Margin="5,10">
+                <TextBlock Text="{Binding PlayerText}"
+                           FontSize="{Binding OverlaySettings.FontSizeDriver}"
+                           Foreground="{Binding TextBrush}"
+                           HorizontalAlignment="Center"
+                           FontWeight="Bold"/>
+            </Border>
+
+            <!-- Opponents Behind -->
+            <StackPanel Grid.Row="4" Margin="0,5,0,5">
+                <TextBlock Text="↓ BEHIND ↓"
+                           FontSize="{Binding OverlaySettings.FontSizeDriver}"
+                           Foreground="{Binding TextBrush}"
+                           HorizontalAlignment="Center"
+                           Margin="0,5,0,5"/>
+
+                <ItemsControl ItemsSource="{Binding OpponentsBehind}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,2" Padding="5">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0"
+                                               Text="{Binding NameText}"
+                                               FontSize="{Binding FontSizeDriver}"
+                                               Foreground="{Binding ColorBrush}"
+                                               VerticalAlignment="Center"/>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="1"
+                                               Text="{Binding CatchText}"
+                                               FontSize="{Binding FontSizeSmall}"
+                                               Foreground="{Binding ColorBrush}"
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="1"
+                                               Text="{Binding DetailsText}"
+                                               FontSize="{Binding FontSizeSmall}"
+                                               Foreground="{Binding ColorBrush}"
+                                               HorizontalAlignment="Right"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
+
