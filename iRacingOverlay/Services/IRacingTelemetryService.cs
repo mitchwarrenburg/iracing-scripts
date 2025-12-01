@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using iRacingOverlay.Models;
-using iRSDKSharp;
+using iRacingSdkWrapper;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -12,7 +12,7 @@ public class IRacingTelemetryService
 {
     private readonly ILogger<IRacingTelemetryService> _logger;
     private readonly AppSettings _settings;
-    private readonly iRacingSDK _sdk;
+    private readonly SdkWrapper _sdk;
     private readonly Dictionary<int, DriverData> _drivers = new();
     private readonly Dictionary<int, int> _lastLapCheck = new();
     private int? _playerCarIdx;
@@ -29,14 +29,15 @@ public class IRacingTelemetryService
     {
         _logger = logger;
         _settings = settings.Value;
-        _sdk = new iRacingSDK();
+        _sdk = new SdkWrapper();
+        _sdk.Start();
     }
 
     public bool Connect()
     {
         try
         {
-            if (_sdk.IsConnected())
+            if (_sdk.IsConnected)
             {
                 IsConnected = true;
                 _logger.LogInformation("Connected to iRacing");
@@ -57,6 +58,7 @@ public class IRacingTelemetryService
         IsConnected = false;
         _drivers.Clear();
         _lastLapCheck.Clear();
+        _sdk.Stop();
         ConnectionStateChanged?.Invoke(this, EventArgs.Empty);
         _logger.LogInformation("Disconnected from iRacing");
     }
@@ -65,7 +67,7 @@ public class IRacingTelemetryService
     {
         try
         {
-            if (!_sdk.IsConnected())
+            if (!_sdk.IsConnected)
             {
                 if (IsConnected)
                 {
@@ -79,10 +81,8 @@ public class IRacingTelemetryService
                 Connect();
             }
 
-            _sdk.UpdateData();
-
-            var sessionData = _sdk.GetSessionInfo();
-            if (sessionData == null)
+            var telemetry = _sdk.GetTelemetryValue<object>("SessionTime");
+            if (telemetry == null)
                 return false;
 
             UpdateDrivers();
@@ -126,22 +126,27 @@ public class IRacingTelemetryService
 
     private void UpdateDrivers()
     {
-        var sessionInfo = _sdk.GetSessionInfo();
-        if (sessionInfo == null) return;
+        var sessionData = _sdk.GetSessionInfo();
+        if (sessionData == null) return;
 
-        _playerCarIdx = sessionInfo["DriverInfo"]["DriverCarIdx"].GetValue(0);
-        _sessionTime = _sdk.GetData("SessionTime").GetValue(0.0);
+        _playerCarIdx = sessionData["DriverInfo"]["DriverCarIdx"].GetValue(0);
+        _sessionTime = _sdk.GetTelemetryValue<double>("SessionTime").GetValueOrDefault();
 
-        var drivers = sessionInfo["DriverInfo"]["Drivers"];
+        var drivers = sessionData["DriverInfo"]["Drivers"];
         if (drivers == null) return;
 
-        for (int i = 0; i < 64; i++)  // Max 64 cars
-        {
-            var carIdxPosition = _sdk.GetData("CarIdxPosition", i).GetValue(0);
-            if (carIdxPosition <= 0)
-                continue;
+        var carIdxPosition = _sdk.GetTelemetryValue<int[]>("CarIdxPosition");
+        var carIdxClassPosition = _sdk.GetTelemetryValue<int[]>("CarIdxClassPosition");
+        var carIdxLap = _sdk.GetTelemetryValue<int[]>("CarIdxLap");
+        var carIdxLastLapTime = _sdk.GetTelemetryValue<float[]>("CarIdxLastLapTime");
+        var carIdxLapDistPct = _sdk.GetTelemetryValue<float[]>("CarIdxLapDistPct");
 
-            var carIdx = i;
+        if (carIdxPosition == null) return;
+
+        for (int carIdx = 0; carIdx < carIdxPosition.Length && carIdx < 64; carIdx++)
+        {
+            if (carIdxPosition[carIdx] <= 0)
+                continue;
 
             if (!_drivers.ContainsKey(carIdx))
             {
@@ -160,20 +165,26 @@ public class IRacingTelemetryService
             var driverData = _drivers[carIdx];
 
             // Update position in class
-            driverData.PositionInClass = _sdk.GetData("CarIdxClassPosition", carIdx).GetValue(0);
+            if (carIdxClassPosition != null && carIdx < carIdxClassPosition.Length)
+                driverData.PositionInClass = carIdxClassPosition[carIdx];
 
             // Update current lap
-            var currentLap = _sdk.GetData("CarIdxLap", carIdx).GetValue(0);
+            int currentLap = 0;
+            if (carIdxLap != null && carIdx < carIdxLap.Length)
+                currentLap = carIdxLap[carIdx];
 
             // Check for completed lap
             if (_lastLapCheck.ContainsKey(carIdx))
             {
                 if (currentLap > _lastLapCheck[carIdx])
                 {
-                    var lapTime = _sdk.GetData("CarIdxLastLapTime", carIdx).GetValue(0.0f);
-                    if (lapTime > 0)
+                    if (carIdxLastLapTime != null && carIdx < carIdxLastLapTime.Length)
                     {
-                        driverData.AddLap(currentLap - 1, lapTime, _sessionTime);
+                        var lapTime = carIdxLastLapTime[carIdx];
+                        if (lapTime > 0)
+                        {
+                            driverData.AddLap(currentLap - 1, lapTime, _sessionTime);
+                        }
                     }
                 }
             }
@@ -182,7 +193,8 @@ public class IRacingTelemetryService
             driverData.CurrentLap = currentLap;
 
             // Update track position
-            driverData.CurrentDistance = _sdk.GetData("CarIdxLapDistPct", carIdx).GetValue(0.0f);
+            if (carIdxLapDistPct != null && carIdx < carIdxLapDistPct.Length)
+                driverData.CurrentDistance = carIdxLapDistPct[carIdx];
         }
     }
 
@@ -300,11 +312,11 @@ public class IRacingTelemetryService
     {
         try
         {
-            var sessionInfo = _sdk.GetSessionInfo();
-            if (sessionInfo == null) return false;
+            var sessionData = _sdk.GetSessionInfo();
+            if (sessionData == null) return false;
 
-            var sessionNum = _sdk.GetData("SessionNum").GetValue(0);
-            var sessions = sessionInfo["SessionInfo"]["Sessions"];
+            var sessionNum = _sdk.GetTelemetryValue<int>("SessionNum").GetValueOrDefault();
+            var sessions = sessionData["SessionInfo"]["Sessions"];
 
             if (sessions != null && sessionNum >= 0 && sessionNum < sessions.Count())
             {
